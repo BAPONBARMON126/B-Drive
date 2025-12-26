@@ -86,7 +86,7 @@ input[type=file]{ display:none; }
 
 .filename{
   max-width:240px;
-  overflow-x:auto;
+  overflow:hidden;
   white-space:nowrap;
 }
 .actions button{ margin-left:6px; }
@@ -175,6 +175,13 @@ const API="https://b-drive-backend.onrender.com";
 let currentPath="storage";
 let history=[];
 
+/* ===== NAME SHORTENER (ONLY CHANGE YOU ASKED) ===== */
+function shortName(name){
+  const words = name.split(" ");
+  if(words.length <= 7) return name;
+  return words.slice(0,7).join(" ") + "...";
+}
+
 /* ===== CONNECTION ===== */
 async function checkConnection(){
   try{
@@ -210,14 +217,14 @@ function render(items){
 
     if(i.type==="dir"){
       row.innerHTML=`
-        <span class="filename">📁 <b>${i.name}</b></span>
+        <span class="filename" title="${i.name}">📁 <b>${shortName(i.name)}</b></span>
         <div class="actions">
           <button onclick="openFolder(event,'${i.path}')">📂</button>
           <button onclick="deleteFolder(event,'${i.path}')">🗑</button>
         </div>`;
     }else{
       row.innerHTML=`
-        <span class="filename">${i.name}</span>
+        <span class="filename" title="${i.name}">${shortName(i.name)}</span>
         <div class="actions">
           <button onclick="viewFile(event,'${i.download_url}')">👁</button>
           <button onclick="downloadFile(event,'${i.download_url}','${i.name}')">📥</button>
