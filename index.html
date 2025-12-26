@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cloud File Storage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --green:#00ff66;
+}
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:#000;
+  color:var(--green);
+  font-family:"Courier New", monospace;
+}
+
+header{
+  padding:14px;
+  text-align:center;
+  font-size:20px;
+  border-bottom:1px solid var(--green);
+  text-shadow:0 0 10px var(--green);
+}
+
+/* status */
+.status{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:10px;
+  padding:8px;
+}
+.spinner{
+  width:18px;height:18px;
+  border:2px solid #003d1f;
+  border-top:2px solid var(--green);
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{100%{transform:rotate(360deg)}}
+.tick{display:none;font-weight:bold}
+
+/* layout */
+.container{
+  max-width:900px;
+  margin:auto;
+  padding:16px;
+  text-align:center;
+}
+.toolbar{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+}
+
+/* buttons */
+button{
+  background:transparent;
+  color:var(--green);
+  border:1px solid var(--green);
+  padding:8px 18px;
+  border-radius:999px;
+  cursor:pointer;
+  text-shadow:0 0 6px var(--green);
+}
+button:hover{
+  background:var(--green);
+  color:#000;
+  box-shadow:0 0 15px var(--green);
+}
+input[type=file]{display:none}
+
+/* file list */
+.file-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px;
+  border-bottom:1px solid #003d1f;
+}
+.file-row:hover{background:#021a0c}
+.actions button{margin-left:6px}
+
+/* modal */
+.modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  display:none;
+  justify-content:center;
+  align-items:center;
+  z-index:999;
+}
+.modal-box{
+  background:#000;
+  border:2px solid var(--green);
+  border-radius:16px;
+  padding:16px;
+  width:90%;
+  max-width:850px;
+  box-shadow:0 0 25px var(--green);
+}
+.modal-box iframe,
+.modal-box img,
+.modal-box video,
+.modal-box audio{
+  max-width:100%;
+  max-height:70vh;
+  border-radius:12px;
+}
+.modal-actions{
+  text-align:center;
+  margin-bottom:10px;
+}
+</style>
+</head>
+
+<body>
+
+<header>☁️ Cloud File Storage</header>
+
+<div class="status">
+  <div class="spinner" id="spinner"></div>
+  <div class="tick" id="tick">✔ CONNECTED</div>
+  <span id="statusText">Connecting…</span>
+</div>
+
+<div class="container">
+
+<div class="toolbar">
+  <button onclick="goBack()">⬅ Back</button>
+  <button onclick="createFolder()">📁 New Folder</button>
+  <button onclick="upload()">⬆ Upload</button>
+</div>
+
+<input type="file" id="fileInput" multiple>
+<div id="fileList"></div>
+
+</div>
+
+<!-- Preview -->
+<div class="modal" id="preview">
+  <div class="modal-box">
+    <div class="modal-actions">
+      <button onclick="closePreview()">✖ Close</button>
+    </div>
+    <div id="previewBody"></div>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const API = "https://b-drive-backend.onrender.com";
+let currentPath = "storage";
+let historyStack = [];
+
+/* ================= CONNECTION ================= */
+async function checkConnection(){
+  try{
+    const r = await fetch(API + "/ping");
+    const d = await r.json();
+    if(d.status==="ok"){
+      spinner.style.display="none";
+      tick.style.display="block";
+      statusText.textContent="Server Connected";
+      loadList();
+    }
+  }catch{
+    setTimeout(checkConnection,3000);
+  }
+}
+checkConnection();
+
+/* ================= LIST ================= */
+async function loadList(){
+  const r = await fetch(API + "/list?path=" + currentPath);
+  const items = await r.json();
+  render(items);
+}
+
+function render(items){
+  fileList.innerHTML="";
+  items.forEach(i=>{
+    const row=document.createElement("div");
+    row.className="file-row";
+
+    if(i.type==="dir"){
+      row.innerHTML=`📁 <b>${i.name}</b>`;
+      row.onclick=()=>{
+        historyStack.push(currentPath);
+        currentPath=i.path;
+        loadList();
+      };
+    }else{
+      row.innerHTML=`
+        <span>${i.name}</span>
+        <div class="actions">
+          <button onclick="preview(event,'${i.download_url}')">👁</button>
+          <button onclick="downloadFile(event,'${i.download_url}','${i.name}')">⬇</button>
+          <button onclick="deleteFile(event,'${i.path}','${i.sha}')">🗑</button>
+        </div>`;
+    }
+    fileList.appendChild(row);
+  });
+}
+
+/* ================= UPLOAD ================= */
+function upload(){ fileInput.click(); }
+
+fileInput.onchange=()=>{
+  [...fileInput.files].forEach(f=>{
+    if(f.size>100*1024*1024){
+      alert("Max 100MB allowed");
+      return;
+    }
+    const fd=new FormData();
+    fd.append("file",f);
+    fd.append("path",currentPath);
+    fetch(API+"/upload",{method:"POST",body:fd})
+      .then(()=>loadList());
+  });
+  fileInput.value="";
+};
+
+/* ================= FOLDER ================= */
+function createFolder(){
+  const name=prompt("Folder name?");
+  if(!name) return;
+  fetch(API+"/folder",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({path:currentPath+"/"+name})
+  }).then(()=>loadList());
+}
+
+/* ================= DELETE ================= */
+function deleteFile(e,path,sha){
+  e.stopPropagation();
+  if(!confirm("Delete file?")) return;
+  fetch(API+"/delete",{
+    method:"DELETE",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({path,sha})
+  }).then(()=>loadList());
+}
+
+/* ================= NAV ================= */
+function goBack(){
+  if(!historyStack.length) return;
+  currentPath = historyStack.pop();
+  loadList();
+}
+
+/* ================= PREVIEW ================= */
+function preview(e,url){
+  e.stopPropagation();
+  const b=previewBody;
+  b.innerHTML="";
+
+  if(url.match(/\.(png|jpg|jpeg|webp)$/i))
+    b.innerHTML=`<img src="${url}">`;
+  else if(url.endsWith(".pdf"))
+    b.innerHTML=`<iframe src="${url}" width="100%" height="500"></iframe>`;
+  else if(url.match(/\.(mp4)$/i))
+    b.innerHTML=`<video src="${url}" controls></video>`;
+  else if(url.match(/\.(mp3)$/i))
+    b.innerHTML=`<audio src="${url}" controls></audio>`;
+  else if(url.match(/\.(docx|xlsx|pptx)$/i))
+    b.innerHTML=`<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}" width="100%" height="500"></iframe>`;
+  else
+    b.innerHTML="Preview not supported";
+
+  previewBox.style.display="flex";
+}
+
+function closePreview(){
+  previewBox.style.display="none";
+}
+
+/* ================= DOWNLOAD ================= */
+function downloadFile(e,url,name){
+  e.stopPropagation();
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=name;
+  a.click();
+}
+</script>
+
+</body>
+</html>
