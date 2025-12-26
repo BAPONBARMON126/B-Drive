@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Cloud File Storage</title>
+<title>B-Drive | Cloud File Storage</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 :root{ --green:#00ff66; }
-*{box-sizing:border-box}
+*{ box-sizing:border-box; }
 
 body{
   margin:0;
@@ -15,6 +15,7 @@ body{
   color:var(--green);
   font-family:"Courier New", monospace;
 }
+
 header{
   padding:14px;
   text-align:center;
@@ -23,8 +24,14 @@ header{
   text-shadow:0 0 10px var(--green);
 }
 
-/* status */
-.status{display:flex;justify-content:center;gap:10px;padding:8px}
+/* ===== STATUS ===== */
+.status{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:10px;
+  padding:8px;
+}
 .spinner{
   width:18px;height:18px;
   border:2px solid #003d1f;
@@ -35,10 +42,22 @@ header{
 @keyframes spin{100%{transform:rotate(360deg)}}
 .tick{display:none;font-weight:bold}
 
-/* layout */
-.container{max-width:900px;margin:auto;padding:16px;text-align:center}
-.toolbar{display:flex;justify-content:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+/* ===== LAYOUT ===== */
+.container{
+  max-width:900px;
+  margin:auto;
+  padding:16px;
+  text-align:center;
+}
+.toolbar{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:16px;
+}
 
+/* ===== BUTTONS ===== */
 button{
   background:transparent;
   color:var(--green);
@@ -48,28 +67,47 @@ button{
   cursor:pointer;
   text-shadow:0 0 6px var(--green);
 }
-button:hover{background:var(--green);color:#000;box-shadow:0 0 15px var(--green)}
-
-input[type=file]{display:none}
-
-.file-row{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:10px;border-bottom:1px solid #003d1f;
+button:hover{
+  background:var(--green);
+  color:#000;
+  box-shadow:0 0 15px var(--green);
 }
-.file-row:hover{background:#021a0c}
-.actions button{margin-left:6px}
+input[type=file]{ display:none; }
 
-/* modal */
+/* ===== FILE LIST ===== */
+.file-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px;
+  border-bottom:1px solid #003d1f;
+}
+.file-row:hover{ background:#021a0c; }
+
+.filename{
+  max-width:240px;
+  overflow-x:auto;
+  white-space:nowrap;
+}
+.actions button{ margin-left:6px; }
+
+/* ===== MODAL ===== */
 .modal{
-  position:fixed;inset:0;
+  position:fixed;
+  inset:0;
   background:rgba(0,0,0,.85);
-  display:none;justify-content:center;align-items:center;
+  display:none;
+  justify-content:center;
+  align-items:center;
   z-index:999;
 }
 .modal-box{
-  background:#000;border:2px solid var(--green);
-  border-radius:16px;padding:16px;
-  width:90%;max-width:800px;
+  background:#000;
+  border:2px solid var(--green);
+  border-radius:16px;
+  padding:16px;
+  width:90%;
+  max-width:850px;
   box-shadow:0 0 25px var(--green);
   text-align:center;
 }
@@ -77,17 +115,22 @@ input[type=file]{display:none}
 .modal-box img,
 .modal-box video,
 .modal-box audio{
-  max-width:100%;max-height:70vh;border-radius:12px;
+  max-width:100%;
+  max-height:70vh;
+  border-radius:12px;
 }
 
-/* progress */
+/* ===== PROGRESS ===== */
 .progress{
-  width:100%;height:10px;
+  width:100%;
+  height:10px;
   border:1px solid var(--green);
-  margin-top:12px;border-radius:10px;
+  margin-top:12px;
+  border-radius:10px;
 }
 .bar{
-  height:100%;width:0%;
+  height:100%;
+  width:0%;
   background:var(--green);
   box-shadow:0 0 10px var(--green);
   border-radius:10px;
@@ -97,7 +140,7 @@ input[type=file]{display:none}
 
 <body>
 
-<header>☁️ Cloud File Storage</header>
+<header>☁️ B-Drive Cloud Storage</header>
 
 <div class="status">
   <div class="spinner" id="spinner"></div>
@@ -115,11 +158,11 @@ input[type=file]{display:none}
   <div id="fileList"></div>
 </div>
 
-<!-- Preview / Popup Modal -->
-<div class="modal" id="preview">
+<!-- POPUP / PREVIEW -->
+<div class="modal" id="popup">
   <div class="modal-box">
-    <button onclick="closePreview()">✖ Close</button>
-    <div id="previewBody"></div>
+    <button onclick="closePopup()">✖ Close</button>
+    <div id="popupBody"></div>
     <div class="progress" id="progressBox" style="display:none">
       <div class="bar" id="progressBar"></div>
     </div>
@@ -127,9 +170,12 @@ input[type=file]{display:none}
 </div>
 
 <script>
+/* ===== CONFIG ===== */
 const API="https://b-drive-backend.onrender.com";
-let currentPath="storage", history=[];
+let currentPath="storage";
+let history=[];
 
+/* ===== CONNECTION ===== */
 async function checkConnection(){
   try{
     const r=await fetch(API+"/ping");
@@ -140,27 +186,41 @@ async function checkConnection(){
       statusText.textContent="Server Connected";
       loadList();
     }
-  }catch{ setTimeout(checkConnection,3000); }
+  }catch{
+    setTimeout(checkConnection,3000);
+  }
 }
 checkConnection();
 
-/* list */
+/* ===== LIST ===== */
 async function loadList(){
   const r=await fetch(API+"/list?path="+currentPath);
   const items=await r.json();
+  render(items);
+}
+
+function render(items){
   fileList.innerHTML="";
-  items.forEach(i=>{
+  const folders = items.filter(i=>i.type==="dir");
+  const files   = items.filter(i=>i.type==="file");
+
+  [...folders, ...files].forEach(i=>{
     const row=document.createElement("div");
     row.className="file-row";
+
     if(i.type==="dir"){
-      row.innerHTML=`📁 <b>${i.name}</b>`;
-      row.onclick=()=>{ history.push(currentPath); currentPath=i.path; loadList(); };
+      row.innerHTML=`
+        <span class="filename">📁 <b>${i.name}</b></span>
+        <div class="actions">
+          <button onclick="openFolder(event,'${i.path}')">📂</button>
+          <button onclick="deleteFolder(event,'${i.path}')">🗑</button>
+        </div>`;
     }else{
       row.innerHTML=`
-        <span>${i.name}</span>
+        <span class="filename">${i.name}</span>
         <div class="actions">
           <button onclick="viewFile(event,'${i.download_url}')">👁</button>
-          <button onclick="downloadFile(event,'${i.download_url}','${i.name}')">⬇</button>
+          <button onclick="downloadFile(event,'${i.download_url}','${i.name}')">📥</button>
           <button onclick="deleteFile(event,'${i.path}','${i.sha}')">🗑</button>
         </div>`;
     }
@@ -168,12 +228,25 @@ async function loadList(){
   });
 }
 
-/* upload with progress */
+/* ===== NAV ===== */
+function openFolder(e,path){
+  e.stopPropagation();
+  history.push(currentPath);
+  currentPath=path;
+  loadList();
+}
+function goBack(){
+  if(!history.length) return;
+  currentPath=history.pop();
+  loadList();
+}
+
+/* ===== UPLOAD ===== */
 function upload(){ fileInput.click(); }
 
 fileInput.onchange=()=>{
   [...fileInput.files].forEach(f=>{
-    if(f.size>100*1024*1024){alert("Max 100MB");return;}
+    if(f.size>100*1024*1024){ alert("Max 100MB"); return; }
     showPopup("Uploading "+f.name);
     uploadWithProgress(f);
   });
@@ -189,8 +262,7 @@ function uploadWithProgress(file){
   const xhr=new XMLHttpRequest();
   xhr.upload.onprogress=e=>{
     if(e.lengthComputable){
-      const p=(e.loaded/e.total)*100;
-      progressBar.style.width=p+"%";
+      progressBar.style.width=(e.loaded/e.total*100)+"%";
     }
   };
   xhr.onload=()=>{
@@ -202,14 +274,30 @@ function uploadWithProgress(file){
   xhr.send(fd);
 }
 
-/* popup helpers */
-function showPopup(msg){
-  previewBody.innerHTML="<p>"+msg+"</p>";
-  document.getElementById("preview").style.display="flex";
+/* ===== DELETE FILE ===== */
+function deleteFile(e,path,sha){
+  e.stopPropagation();
+  if(!confirm("Delete this file?")) return;
+  fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path,sha})})
+  .then(()=>loadList());
 }
-function closePreview(){ document.getElementById("preview").style.display="none"; }
 
-/* preview */
+/* ===== DELETE FOLDER ===== */
+async function deleteFolder(e,folderPath){
+  e.stopPropagation();
+  if(!confirm("Delete this folder and all files inside?")) return;
+
+  const r=await fetch(API+"/list?path="+folderPath);
+  const items=await r.json();
+  for(const i of items){
+    if(i.type==="file"){
+      await fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:i.path,sha:i.sha})});
+    }
+  }
+  loadList();
+}
+
+/* ===== PREVIEW ===== */
 function viewFile(e,url){
   e.stopPropagation();
   let html="Preview not supported";
@@ -219,31 +307,26 @@ function viewFile(e,url){
   else if(url.match(/\.(mp3)$/i)) html=`<audio src="${url}" controls></audio>`;
   else if(url.match(/\.(docx|xlsx|pptx)$/i))
     html=`<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}" width="100%" height="500"></iframe>`;
-  previewBody.innerHTML=html;
-  document.getElementById("preview").style.display="flex";
+  popupBody.innerHTML=html;
+  popup.style.display="flex";
 }
 
-/* delete */
-function deleteFile(e,path,sha){
-  e.stopPropagation();
-  if(!confirm("Delete this file?")) return;
-  fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path,sha})})
-  .then(()=>{ alert("Deleted ✔"); loadList(); });
-}
-
+/* ===== DOWNLOAD ===== */
 function downloadFile(e,url,name){
   e.stopPropagation();
   const a=document.createElement("a");
-  a.href=url; a.download=name; a.click();
+  a.href=url; a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
-function createFolder(){
-  const n=prompt("Folder name?");
-  if(!n) return;
-  fetch(API+"/folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:currentPath+"/"+n})})
-  .then(()=>loadList());
+/* ===== POPUP ===== */
+function showPopup(msg){
+  popupBody.innerHTML="<p>"+msg+"</p>";
+  popup.style.display="flex";
 }
-function goBack(){ if(history.length){ currentPath=history.pop(); loadList(); } }
+function closePopup(){ popup.style.display="none"; }
 </script>
 
 </body>
