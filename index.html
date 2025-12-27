@@ -76,6 +76,36 @@ header{
 }
 .toolbar button:hover{background:var(--green);color:#000}
 
+/* PROGRESS BAR */
+.progress-box{
+  display:none;
+  border:1px solid var(--green);
+  border-radius:10px;
+  padding:6px;
+  margin-bottom:12px;
+}
+.progress{
+  height:8px;
+  background:#003d1f;
+  border-radius:10px;
+  overflow:hidden;
+}
+.progress-bar{
+  height:100%;
+  width:0%;
+  background:var(--green);
+}
+.cancel-btn{
+  margin-top:6px;
+  background:transparent;
+  color:red;
+  border:1px solid red;
+  padding:3px 10px;
+  border-radius:999px;
+  font-size:11px;
+  cursor:pointer;
+}
+
 /* IMAGE GRID */
 .thumb-grid{
   display:grid;
@@ -171,7 +201,6 @@ header{
 
 <header>☁️ B-Drive Cloud Storage</header>
 
-<!-- STATUS -->
 <div class="status">
   <div class="status-box">
     <div class="spinner" id="spinner"></div>
@@ -190,13 +219,21 @@ header{
     <button onclick="refreshList()">Refresh</button>
   </div>
 
+  <!-- PROGRESS + CANCEL -->
+  <div class="progress-box" id="progressBox">
+    <div class="progress">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <button class="cancel-btn" onclick="cancelUpload()">Cancel Upload</button>
+  </div>
+
   <input type="file" id="fileInput" multiple hidden>
 
   <div id="thumbGrid" class="thumb-grid"></div>
   <div id="fileList"></div>
 </div>
 
-<!-- PREVIEW MODAL -->
+<!-- PREVIEW -->
 <div class="modal" id="viewer">
   <div class="modal-box">
     <button onclick="closeViewer()">Close</button>
@@ -208,12 +245,12 @@ header{
 const API="https://b-drive-backend.onrender.com";
 let currentPath="storage";
 let history=[];
+let currentXHR=null;
 
-/* ===== CONNECTION CHECK ===== */
+/* CONNECT */
 (async()=>{
   try{
-    const r=await fetch(API+"/ping");
-    const d=await r.json();
+    await fetch(API+"/ping");
     spinner.style.display="none";
     tick.style.display="block";
     statusText.textContent="Connected";
@@ -223,22 +260,17 @@ let history=[];
   }
 })();
 
-function isImage(name){
-  return /\.(png|jpg|jpeg|webp|gif)$/i.test(name);
-}
-function getURL(i){
-  return i.download_url || `https://raw.githubusercontent.com/${i.path}`;
-}
+function isImage(name){ return /\.(png|jpg|jpeg|webp|gif)$/i.test(name); }
+function getURL(i){ return i.download_url || `https://raw.githubusercontent.com/${i.path}`; }
 
 /* LOAD */
 async function loadList(path=currentPath){
   currentPath=path;
   const r=await fetch(API+"/list?path="+path);
   let items=await r.json();
-  if(!Array.isArray(items)) items=[items]; // 🔥 IMPORTANT FIX
+  if(!Array.isArray(items)) items=[items];
   render(items);
 }
-
 function refreshList(){ loadList(currentPath); }
 
 /* RENDER */
@@ -247,7 +279,6 @@ function render(items){
   thumbGrid.innerHTML="";
 
   items.forEach(i=>{
-    /* IMAGE THUMB */
     if(i.type==="file" && isImage(i.name)){
       const t=document.createElement("div");
       t.className="thumb";
@@ -272,7 +303,6 @@ function render(items){
       return;
     }
 
-    /* OTHER FILES + FOLDERS */
     const row=document.createElement("div");
     row.className="file-row";
     row.innerHTML=`
@@ -308,6 +338,43 @@ function closeMenus(){
   document.querySelectorAll(".menu-box").forEach(m=>m.style.display="none");
 }
 
+/* UPLOAD WITH CANCEL */
+function pickFile(){ fileInput.click(); }
+fileInput.onchange=()=>{
+  [...fileInput.files].forEach(f=>{
+    const fd=new FormData();
+    fd.append("file",f);
+    fd.append("path",currentPath);
+
+    const xhr=new XMLHttpRequest();
+    currentXHR=xhr;
+
+    xhr.upload.onprogress=e=>{
+      progressBox.style.display="block";
+      progressBar.style.width=(e.loaded/e.total*100)+"%";
+    };
+    xhr.onload=()=>{
+      progressBox.style.display="none";
+      progressBar.style.width="0%";
+      currentXHR=null;
+      loadList(currentPath);
+    };
+    xhr.onerror=()=>cancelUpload();
+
+    xhr.open("POST",API+"/upload");
+    xhr.send(fd);
+  });
+};
+
+function cancelUpload(){
+  if(currentXHR){
+    currentXHR.abort();
+    currentXHR=null;
+  }
+  progressBox.style.display="none";
+  progressBar.style.width="0%";
+}
+
 /* PREVIEW */
 function openPreview(url,name){
   let html="Preview not supported";
@@ -321,7 +388,6 @@ function openPreview(url,name){
     html=`<video src="${url}" controls></video>`;
   else if(/\.(docx|xlsx|pptx)$/i.test(url))
     html=`<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}" width="100%" height="400"></iframe>`;
-
   viewerBody.innerHTML=html;
   viewer.style.display="flex";
 }
@@ -336,7 +402,6 @@ function downloadFile(url,name){
 /* DELETE */
 async function deleteItem(path,type,sha){
   if(!confirm("Delete permanently?"))return;
-
   if(type==="file"){
     await fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path,sha})});
   }else{
@@ -346,17 +411,6 @@ async function deleteItem(path,type,sha){
   }
   loadList(currentPath);
 }
-
-/* UPLOAD */
-function pickFile(){ fileInput.click(); }
-fileInput.onchange=()=>{
-  [...fileInput.files].forEach(f=>{
-    const fd=new FormData();
-    fd.append("file",f);
-    fd.append("path",currentPath);
-    fetch(API+"/upload",{method:"POST",body:fd}).then(()=>loadList(currentPath));
-  });
-};
 
 /* NAV */
 function goBack(){ if(history.length) loadList(history.pop()); }
