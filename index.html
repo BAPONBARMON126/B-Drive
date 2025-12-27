@@ -22,7 +22,7 @@ header{
   text-align:center;
   font-size:20px;
   border-bottom:1px solid var(--green);
-  text-shadow:0 0 10px var(--green);
+  text-shadow:0 0 8px var(--green);
 }
 
 /* STATUS */
@@ -34,49 +34,64 @@ header{
 .status-box{
   display:flex;
   align-items:center;
-  gap:8px;
-  padding:6px 14px;
+  gap:6px;
+  padding:6px 12px;
   border:1px solid var(--green);
   border-radius:999px;
-  box-shadow:0 0 10px rgba(0,255,102,.4);
+  font-size:12px;
 }
 .spinner{
-  width:14px;height:14px;
+  width:12px;height:12px;
   border:2px solid #003d1f;
   border-top:2px solid var(--green);
   border-radius:50%;
   animation:spin 1s linear infinite;
 }
 @keyframes spin{100%{transform:rotate(360deg)}}
-.tick{display:none;font-weight:bold}
+.tick{display:none}
 
 /* CONTAINER */
 .container{
-  max-width:900px;
+  max-width:1100px;
   margin:auto;
   padding:14px;
 }
 
-/* TOOLBAR */
+/* TOOLBAR – COMPACT & RESPONSIVE */
 .toolbar{
   display:flex;
   justify-content:center;
-  gap:8px;
-  flex-wrap:nowrap;
+  gap:6px;
+  flex-wrap:wrap;          /* 🔥 wrap instead of scroll */
   margin-bottom:14px;
 }
 .toolbar button{
   background:transparent;
   color:var(--green);
   border:1px solid var(--green);
-  padding:6px 14px;
+  padding:5px 10px;        /* 🔥 smaller */
   border-radius:999px;
   cursor:pointer;
-  font-size:13px;
+  font-size:12px;          /* 🔥 smaller text */
+  line-height:1;
 }
 .toolbar button:hover{
   background:var(--green);
   color:#000;
+}
+
+/* PROGRESS */
+.progress{
+  height:8px;
+  border:1px solid var(--green);
+  border-radius:10px;
+  margin-bottom:10px;
+  display:none;
+}
+.bar{
+  height:100%;
+  width:0%;
+  background:var(--green);
 }
 
 /* FILE LIST */
@@ -86,7 +101,6 @@ header{
   align-items:center;
   padding:10px;
   border-bottom:1px solid #003d1f;
-  cursor:pointer;
 }
 .file-row:hover{ background:#021a0c; }
 
@@ -94,14 +108,15 @@ header{
   max-width:260px;
   overflow:hidden;
   white-space:nowrap;
+  font-size:13px;
 }
 
 /* MENU */
 .menu{ position:relative; }
 .menu-btn{
   cursor:pointer;
-  font-size:18px;
-  padding:4px 6px;
+  font-size:16px;
+  padding:2px 4px;
 }
 .menu-box{
   display:none;
@@ -110,12 +125,13 @@ header{
   top:22px;
   background:#000;
   border:1px solid var(--green);
-  min-width:140px;
+  min-width:150px;
   z-index:99;
 }
 .menu-box div{
   padding:8px 12px;
   cursor:pointer;
+  user-select:none;
   font-size:13px;
 }
 .menu-box div:hover{
@@ -136,9 +152,9 @@ header{
 .modal-box{
   background:#000;
   border:2px solid var(--green);
-  padding:16px;
-  max-width:700px;
-  width:90%;
+  padding:14px;
+  max-width:850px;
+  width:92%;
 }
 .modal-box iframe,
 .modal-box img,
@@ -152,7 +168,7 @@ header{
 
 <body>
 
-<header>☁️ B-Drive</header>
+<header>☁️ B-Drive Cloud Storage</header>
 
 <div class="status">
   <div class="status-box">
@@ -163,18 +179,23 @@ header{
 </div>
 
 <div class="container">
+
   <div class="toolbar">
+    <button onclick="goHome()">Home</button>
     <button onclick="goBack()">Back</button>
     <button onclick="createFolder()">New Folder</button>
     <button onclick="pickFile()">Upload</button>
     <button onclick="refreshList()">Refresh</button>
   </div>
 
+  <div class="progress" id="progressBox">
+    <div class="bar" id="progressBar"></div>
+  </div>
+
   <input type="file" id="fileInput" multiple hidden>
   <div id="fileList"></div>
 </div>
 
-<!-- VIEW / DETAILS MODAL -->
 <div class="modal" id="viewer">
   <div class="modal-box">
     <button onclick="closeViewer()">Close</button>
@@ -183,146 +204,99 @@ header{
 </div>
 
 <script>
-const API = "https://b-drive-backend.onrender.com";
-let currentPath = "storage";
-let history = [];
+const API="https://b-drive-backend.onrender.com";
+let currentPath="storage";
+let history=[];
 
 /* CONNECT */
 (async()=>{
-  const r = await fetch(API + "/ping");
-  const d = await r.json();
-  if(d.status === "ok"){
-    spinner.style.display="none";
-    tick.style.display="block";
-    statusText.textContent="Connected";
-    loadList();
-  }
+  const r=await fetch(API+"/ping");
+  const d=await r.json();
+  spinner.style.display="none";
+  tick.style.display="block";
+  statusText.textContent="Connected";
+  loadList();
 })();
 
-/* LOAD LIST */
+/* LOAD */
 async function loadList(path=currentPath){
-  currentPath = path;
-  const r = await fetch(API + "/list?path=" + currentPath);
-  let items = await r.json();
+  currentPath=path;
+  const r=await fetch(API+"/list?path="+path);
+  let items=await r.json();
   if(!Array.isArray(items)) items=[items];
   render(items);
 }
-function refreshList(){ loadList(currentPath); }
+
+/* REFRESH */
+function refreshList(){
+  loadList(currentPath);
+}
 
 /* RENDER */
 function render(items){
   fileList.innerHTML="";
-  const folders = items.filter(i=>i.type==="dir");
-  const files   = items.filter(i=>i.type==="file");
-
-  [...folders,...files].forEach(i=>{
+  items.forEach(i=>{
     const row=document.createElement("div");
     row.className="file-row";
-
-    row.onclick=(e)=>{
-      if(e.target.closest(".menu")) return;
-      if(i.type==="dir"){
-        history.push(currentPath);
-        loadList(i.path);
-      }else{
-        previewFile(i.download_url);
-      }
-    };
 
     row.innerHTML=`
       <span class="filename">${i.type==="dir"?"📁 ":""}${i.name}</span>
       <div class="menu">
         <span class="menu-btn">⋮</span>
         <div class="menu-box">
-          ${i.type==="file"?`<div onclick="menuPreview(event,'${i.download_url}')">Preview</div>`:""}
-          ${i.type==="file"?`<div onclick="menuDownload(event,'${i.download_url}','${i.name}')">Download</div>`:""}
-          <div onclick="menuDetails(event,'${i.path}')">Details</div>
-          <div onclick="menuDelete(event,'${i.path}','${i.sha||""}','${i.type}')">Delete</div>
+          ${i.type==="file"?`<div onclick="previewFile(event,'${i.download_url}')">Preview</div>`:""}
+          ${i.type==="file"?`<div onclick="downloadFile(event,'${i.download_url}','${i.name}')">Download</div>`:""}
+          <div onclick="showDetails(event,'${i.path}')">Details</div>
+          <div onclick="deleteRecursive(event,'${i.path}','${i.type}')">Delete</div>
         </div>
       </div>
     `;
 
-    const btn=row.querySelector(".menu-btn");
-    const box=row.querySelector(".menu-box");
+    row.onclick=(e)=>{
+      if(e.target.closest(".menu")) return;
+      if(i.type==="dir"){
+        history.push(currentPath);
+        loadList(i.path);
+      }
+    };
 
-    btn.onclick=(e)=>{
+    row.querySelector(".menu-btn").onclick=(e)=>{
       e.stopPropagation();
-      closeAllMenus();
-      box.style.display="block";
+      closeMenus();
+      row.querySelector(".menu-box").style.display="block";
     };
 
     fileList.appendChild(row);
   });
 }
 
-/* MENU HELPERS */
-document.addEventListener("click", closeAllMenus);
-function closeAllMenus(){
-  document.querySelectorAll(".menu-box")
-    .forEach(m=>m.style.display="none");
+/* MENU */
+document.addEventListener("click",closeMenus);
+function closeMenus(){
+  document.querySelectorAll(".menu-box").forEach(m=>m.style.display="none");
 }
 
-function menuPreview(e,url){
+/* DELETE */
+async function deleteRecursive(e,path,type){
   e.stopPropagation();
-  previewFile(url);
-}
+  if(!confirm("Delete permanently?")) return;
 
-function menuDownload(e,url,name){
-  e.stopPropagation();
-  const a=document.createElement("a");
-  a.href=url;
-  a.download=name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
+  const r=await fetch(API+"/list?path="+path);
+  let items=await r.json();
 
-async function menuDetails(e,path){
-  e.stopPropagation();
-  const r=await fetch(API+"/details?path="+path);
-  const d=await r.json();
-
-  viewerBody.innerHTML=`
-    <h3>Details</h3>
-    <p><b>Name:</b> ${d.name}</p>
-    <p><b>Type:</b> ${d.type}</p>
-    <p><b>Path:</b> ${d.path}</p>
-    <p><b>Size:</b> ${(d.size/1024).toFixed(2)} KB</p>
-    ${d.filesCount!==undefined?`<p><b>Files:</b> ${d.filesCount}</p>`:""}
-    <p><b>Last Modified:</b> ${d.lastModified || "N/A"}</p>
-  `;
-  viewer.style.display="flex";
-}
-
-async function menuDelete(e,path,sha,type){
-  e.stopPropagation();
-  if(!confirm("Delete?")) return;
-
-  await fetch(API+"/delete",{
-    method:"DELETE",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({path,sha})
-  });
-
+  if(Array.isArray(items)){
+    for(const it of items){
+      await deleteRecursive({stopPropagation(){}},it.path,it.type);
+    }
+  }else{
+    await fetch(API+"/delete",{
+      method:"DELETE",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({path:items.path,sha:items.sha})
+    });
+  }
   loadList(currentPath);
 }
-
-/* PREVIEW */
-function previewFile(url){
-  let html="Preview not supported";
-  if(url.match(/\.(png|jpg|jpeg|webp)$/i))
-    html=`<img src="${url}">`;
-  else if(url.endsWith(".pdf"))
-    html=`<iframe src="${url}" width="100%" height="500"></iframe>`;
-  else if(url.match(/\.(mp4)$/i))
-    html=`<video src="${url}" controls></video>`;
-  else if(url.match(/\.(mp3)$/i))
-    html=`<audio src="${url}" controls></audio>`;
-
-  viewerBody.innerHTML=html;
-  viewer.style.display="flex";
-}
-function closeViewer(){ viewer.style.display="none"; }
 
 /* UPLOAD */
 function pickFile(){ fileInput.click(); }
@@ -331,26 +305,65 @@ fileInput.onchange=()=>{
     const fd=new FormData();
     fd.append("file",f);
     fd.append("path",currentPath);
-    fetch(API+"/upload",{method:"POST",body:fd})
-      .then(()=>loadList(currentPath));
+
+    const xhr=new XMLHttpRequest();
+    xhr.upload.onprogress=e=>{
+      progressBox.style.display="block";
+      progressBar.style.width=(e.loaded/e.total*100)+"%";
+    };
+    xhr.onload=()=>{
+      progressBox.style.display="none";
+      loadList(currentPath);
+    };
+    xhr.open("POST",API+"/upload");
+    xhr.send(fd);
   });
 };
 
-/* CREATE FOLDER */
-function createFolder(){
-  const name=prompt("Folder name?");
-  if(!name) return;
-  fetch(API+"/folder",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({path:currentPath+"/"+name})
-  }).then(()=>loadList(currentPath));
+/* PREVIEW */
+function previewFile(e,url){
+  e.stopPropagation();
+  viewerBody.innerHTML=`<iframe src="${url}" width="100%" height="500"></iframe>`;
+  viewer.style.display="flex";
+}
+function closeViewer(){ viewer.style.display="none"; }
+
+/* DETAILS */
+async function showDetails(e,path){
+  e.stopPropagation();
+  const r=await fetch(API+"/details?path="+path);
+  const d=await r.json();
+  viewerBody.innerHTML=`
+    <h3>Details</h3>
+    <p><b>Name:</b> ${d.name}</p>
+    <p><b>Type:</b> ${d.type}</p>
+    <p><b>Size:</b> ${(d.size/1024).toFixed(2)} KB</p>
+    ${d.filesCount?`<p><b>Files:</b> ${d.filesCount}</p>`:""}
+    <p><b>Last Modified:</b> ${d.lastModified||"N/A"}</p>
+  `;
+  viewer.style.display="flex";
+}
+
+/* DOWNLOAD */
+function downloadFile(e,url,name){
+  e.stopPropagation();
+  const a=document.createElement("a");
+  a.href=url; a.download=name; a.click();
 }
 
 /* NAV */
-function goBack(){
-  if(!history.length) return;
-  loadList(history.pop());
+function goBack(){ if(history.length) loadList(history.pop()); }
+function goHome(){ history=[]; loadList("storage"); }
+
+/* CREATE FOLDER */
+function createFolder(){
+  const n=prompt("Folder name?");
+  if(!n) return;
+  fetch(API+"/folder",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({path:currentPath+"/"+n})
+  }).then(()=>loadList(currentPath));
 }
 </script>
 
