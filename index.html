@@ -24,7 +24,7 @@ header{
   text-shadow:0 0 10px var(--green);
 }
 
-/* ===== STATUS ===== */
+/* STATUS */
 .status{
   display:flex;
   justify-content:center;
@@ -42,7 +42,7 @@ header{
 @keyframes spin{100%{transform:rotate(360deg)}}
 .tick{display:none;font-weight:bold}
 
-/* ===== LAYOUT ===== */
+/* LAYOUT */
 .container{
   max-width:900px;
   margin:auto;
@@ -57,7 +57,7 @@ header{
   margin-bottom:16px;
 }
 
-/* ===== BUTTONS ===== */
+/* BUTTONS */
 button{
   background:transparent;
   color:var(--green);
@@ -74,7 +74,7 @@ button:hover{
 }
 input[type=file]{ display:none; }
 
-/* ===== FILE LIST ===== */
+/* FILE LIST */
 .file-row{
   display:flex;
   justify-content:space-between;
@@ -91,7 +91,7 @@ input[type=file]{ display:none; }
 }
 .actions button{ margin-left:6px; }
 
-/* ===== MODAL ===== */
+/* MODAL */
 .modal{
   position:fixed;
   inset:0;
@@ -120,7 +120,7 @@ input[type=file]{ display:none; }
   border-radius:12px;
 }
 
-/* ===== PROGRESS ===== */
+/* PROGRESS */
 .progress{
   width:100%;
   height:10px;
@@ -158,7 +158,7 @@ input[type=file]{ display:none; }
   <div id="fileList"></div>
 </div>
 
-<!-- POPUP / PREVIEW -->
+<!-- POPUP -->
 <div class="modal" id="popup">
   <div class="modal-box">
     <button onclick="closePopup()">✖ Close</button>
@@ -170,19 +170,18 @@ input[type=file]{ display:none; }
 </div>
 
 <script>
-/* ===== CONFIG ===== */
+/* CONFIG */
 const API="https://b-drive-backend.onrender.com";
 let currentPath="storage";
 let history=[];
 
-/* ===== NAME SHORTENER (ONLY CHANGE YOU ASKED) ===== */
+/* FILE NAME SHORTENER (7 words only) */
 function shortName(name){
-  const words = name.split(" ");
-  if(words.length <= 7) return name;
-  return words.slice(0,7).join(" ") + "...";
+  const w=name.split(" ");
+  return w.length<=7 ? name : w.slice(0,7).join(" ")+"...";
 }
 
-/* ===== CONNECTION ===== */
+/* CONNECTION */
 async function checkConnection(){
   try{
     const r=await fetch(API+"/ping");
@@ -191,7 +190,7 @@ async function checkConnection(){
       spinner.style.display="none";
       tick.style.display="block";
       statusText.textContent="Server Connected";
-      loadList();
+      loadList(currentPath);
     }
   }catch{
     setTimeout(checkConnection,3000);
@@ -199,8 +198,9 @@ async function checkConnection(){
 }
 checkConnection();
 
-/* ===== LIST ===== */
-async function loadList(){
+/* LIST (FIXED PATH SYNC) */
+async function loadList(path=currentPath){
+  currentPath = path; // ⭐ FIX: always sync path
   const r=await fetch(API+"/list?path="+currentPath);
   const items=await r.json();
   render(items);
@@ -208,10 +208,10 @@ async function loadList(){
 
 function render(items){
   fileList.innerHTML="";
-  const folders = items.filter(i=>i.type==="dir");
-  const files   = items.filter(i=>i.type==="file");
+  const folders=items.filter(i=>i.type==="dir");
+  const files=items.filter(i=>i.type==="file");
 
-  [...folders, ...files].forEach(i=>{
+  [...folders,...files].forEach(i=>{
     const row=document.createElement("div");
     row.className="file-row";
 
@@ -235,20 +235,18 @@ function render(items){
   });
 }
 
-/* ===== NAV ===== */
+/* NAV */
 function openFolder(e,path){
   e.stopPropagation();
   history.push(currentPath);
-  currentPath=path;
-  loadList();
+  loadList(path);
 }
 function goBack(){
   if(!history.length) return;
-  currentPath=history.pop();
-  loadList();
+  loadList(history.pop());
 }
 
-/* ===== UPLOAD ===== */
+/* UPLOAD */
 function upload(){ fileInput.click(); }
 
 fileInput.onchange=()=>{
@@ -275,21 +273,24 @@ function uploadWithProgress(file){
   xhr.onload=()=>{
     showPopup("Upload completed ✔");
     progressBox.style.display="none";
-    loadList();
+    loadList(currentPath); // ⭐ FIX
   };
   xhr.open("POST",API+"/upload");
   xhr.send(fd);
 }
 
-/* ===== DELETE FILE ===== */
+/* DELETE FILE */
 function deleteFile(e,path,sha){
   e.stopPropagation();
   if(!confirm("Delete this file?")) return;
-  fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path,sha})})
-  .then(()=>loadList());
+  fetch(API+"/delete",{
+    method:"DELETE",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({path,sha})
+  }).then(()=>loadList(currentPath));
 }
 
-/* ===== DELETE FOLDER ===== */
+/* DELETE FOLDER */
 async function deleteFolder(e,folderPath){
   e.stopPropagation();
   if(!confirm("Delete this folder and all files inside?")) return;
@@ -298,13 +299,17 @@ async function deleteFolder(e,folderPath){
   const items=await r.json();
   for(const i of items){
     if(i.type==="file"){
-      await fetch(API+"/delete",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:i.path,sha:i.sha})});
+      await fetch(API+"/delete",{
+        method:"DELETE",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({path:i.path,sha:i.sha})
+      });
     }
   }
-  loadList();
+  loadList(currentPath);
 }
 
-/* ===== PREVIEW ===== */
+/* PREVIEW */
 function viewFile(e,url){
   e.stopPropagation();
   let html="Preview not supported";
@@ -318,7 +323,7 @@ function viewFile(e,url){
   popup.style.display="flex";
 }
 
-/* ===== DOWNLOAD ===== */
+/* DOWNLOAD */
 function downloadFile(e,url,name){
   e.stopPropagation();
   const a=document.createElement("a");
@@ -328,7 +333,7 @@ function downloadFile(e,url,name){
   a.remove();
 }
 
-/* ===== POPUP ===== */
+/* POPUP */
 function showPopup(msg){
   popupBody.innerHTML="<p>"+msg+"</p>";
   popup.style.display="flex";
